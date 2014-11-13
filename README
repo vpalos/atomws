@@ -1,0 +1,190 @@
+--- Description ----------------------------------------------------------------------------------------------
+
+    AtomWS (rapid prototyping web-servers) <http://atomws.com>.
+    Copyright (C)2011 Valeriu Paloş <valeriu@palos.ro>. All rights reserved.
+    GNU General Public License 3 <http://www.gnu.org/licenses/gpl-3.0.html>.
+
+    The AtomWS (i.e. Web Services) project is a server platform based on NodeJS for rapidly developing high
+    performance web-based services in a very flexible and intuitive manner. Practically this is a server that
+    can be configured via a single JavaScript configuration file to run one or more services in almost any
+    way imaginable by combining a set of components to describe the desired services. This enables one to
+    create almost any kind of server very quickly (e.g. balancers, HTTP servers etc.).
+
+
+--- To Do ----------------------------------------------------------------------------------------------------
+
+  * IPv6 support.
+  * HTTPS (i.e. OpenSSL) support (i.e. service.secure).
+  * Proper atom documentation.
+  * Multipart form parsing.
+
+
+--- License --------------------------------------------------------------------------------------------------
+
+    GNU General Public license v3
+
+    AtomWS is free software: you can redistribute it and/or modify it under the terms of the GNU General
+    Public License as published by the Free Software Foundation, either version 3 of the License, or (at
+    your option) any later version. AtomWS is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details. You should have received a copy of the GNU General
+    Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+    For alternative licensing options please contact the author(s).
+    
+        
+--- Job reference --------------------------------------------------------------------------------------------
+
+    A Job object essentially aggregtates the incoming request and the associated response into a single item.
+A Job has enumerable and non-enumerable members. The enumerable ones (i.e. the ones that are visible to the
+for-in loop) are parsed from the request object provided by NodeJS and are available to all atoms for pattern
+matching; the non-enumerable ones are provided for doing actual work when the job object can be used directly
+(e.g. in dynamic-value functions, see Atom). Here are the Job object members:
+
+    // non-enumerable
+    job.service     // the running service
+    job.request     // the NodeJS request object
+    job.response    // the NodeJS response object
+
+    // enumerable (parsed from job.request)
+    job.client      // Client's ip:port pair as an object (e.g. { ip: 127.0.0.1, port: 61237}).
+    job.method      // HTTP method (i.e. 'GET'), equivalent of job.request.method.
+    job.headers     // HTTP incoming headers, equivalent of job.request.headers.
+    job.uri         // Complete URI (i.e. 'http://example.com:8080/a/b/c/go.txt?search=something&page=42').
+    job.url         // Path and query components (i.e. '/a/b/c/go.txt?search=something&page=42').
+    job.protocol    // Request protocol scheme (i.e. 'http' or 'https');
+    job.host        // Request hostname (e.g. 'example.com').
+    job.port        // Request port (e.g. 80).
+    job.path        // Complete URL path (e.g. '/a/b/c/go.txt').
+    job.query       // Query part of the request URL (e.g. '?search=something&page=42').
+    job.parameters  // Individual query parameters (e.g. { 'search': 'something', 'page': 42 }).
+    
+    All enumerable fields are automatically correlated, which means that if any one of them is modified, all
+other ones are automatically updated to reflect the new information (e.g. make a change in job.parameters and
+job.query and all others are updated immediately, and also viceversa).
+
+
+--- In development -------------------------------------------------------------------------------------------
+
+    Atoms:
+    - 'balance'
+    - 'browse'
+    - 'cache'
+    - 'cgi'
+    - 'file'
+    - 'geoip'
+    - 'upstream'
+    - 'stream'
+    
+    Features:
+    - sendfile() support for disk-accessing atoms (e.g. 'file', 'cache'?).
+    
+
+--- Atom reference -------------------------------------------------------------------------------------------
+
+    Always remember that atom members can be "optional" and/or "dynamic" and this is marked in the reference
+by the side of each member (where applicable); and here is what each of these two words means:
+    - "optional": the member can be left unspecified and the default value will be used instead;
+    - "dynamic": instead of a specific value, you can also use a function as value for that member; this
+      function will receive the current Job object as parameter and must return a proper value when called;
+      dynamic members are invoked on each pass through the atom (i.e. on each request); here is an example:
+      
+      // specific value
+      { atom: 'reply',
+        content: 'Hello!' }
+        
+      // dynamic value
+      { atom: 'reply',
+        content: function(job) {
+            return 'Hello! Your URL looks like: ' + job.url;
+        } }
+
+/** Place atom.
+    This is the simplest atom available. It may have another sub-tree of atoms in the 'route' field which, 
+    if present, will to be used unconditionally when jobs are routed, but other than that it does nothing. 
+    At most, this atom can have two uses:
+    1. A named placeholder (i.e. a label) in the tree, which you can jump to (using the Jump atom).
+    2. A nesting tool which can help to better structure your code into (possibly labeled) sub-trees. */
+    
+    // place
+    { 
+        atom: 'place',
+        route: {...} | [...]        // optional
+    }
+
+    // see the Jump atom for an example...
+    
+/** Jump atom.
+    The jump atom simply passes the control flow directly to the atom marked with the label specified in the
+'to' field. The atom label must be the full atom id (i.e. 'place:someplace'). Watch out for endless loops and
+use --debug for tracing when needed! */
+    
+    // jump
+    { 
+        atom: 'place',
+        to: '«label»'               // dynamic
+    }
+
+    // place/jump example (infinite loop)
+    {
+        atom: 'place:somewhere',
+        route: { 
+            atom: 'jump', 
+            to: 'place:somewhere'
+        }
+    }    
+    
+/** Reply atom.
+    Answers the request with 'HTTP/1.1 200 OK' and an (optional) custom content. Headers 'content-type' and
+'content-length' are generated automatically based on the values of 'mime', 'encoding' and 'content' fields;
+the headers field n only specify *additional* headers and can never overwrite the implicit headers. */  
+    
+    // reply
+    { 
+        atom: 'reply',
+        mime: '«text»',             // dynamic, optional (default is 'text/html')
+        encoding: '«charset»'       // dynamic, optional (default is 'utf-8')
+        headers: {...},             // dynamic, optional (default is {})
+        content: '«text»',          // dynamic, optional (default is '')
+    }
+
+    // reply example
+    {
+        atom: 'reply',
+        content: 'The requested content is not accessible in your country!'
+    }
+    
+/** Error atom.
+    Answer the request with a HTTP error code and an optional custom message. */
+    
+    // error
+    { 
+        atom: 'error',
+        code: «number»,             // dynamic
+        reason: '«text»',           // dynamic, optional (default is generated based on code)
+        encoding: '«charset»'       // dynamic, optional (default is 'utf-8')
+    }
+
+    // error example
+    {
+        atom: 'error',
+        code: 403,
+        reason: 'The requested content is not accessible in your country!'
+    }
+    
+/** Alter atom.
+    Changes details about the incoming request (job) using the supplied rules. 
+    Each rule acts on a «property» which is a part of the current Job object (see the Job reference).
+    Note that the rules can be either a single ruleset (i.e. { «ruile», «rule» ...})
+    or an entire array of rulesets (i.e. [ «ruleset», «ruleset»... ]). */
+    
+    // alter
+    {
+        atom: 'alter',
+        field: 'url',                   // dynamic, optional (default is 'url')
+
+        using: '«replace»',             // dynamic, or...
+               [ '«src»', '«dst»' ],    // dynamic
+        route: «atom(s)»
+    }
+
